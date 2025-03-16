@@ -1,0 +1,70 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - prod
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    pool:
+      name: deep09
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: 'sudo apt-get -y install unzip'
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: 'latest'
+    - task: TerraformTaskV4@4
+      displayName: Tf init
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/prod'
+        backendServiceArm: 'mydevops'
+        backendAzureRmResourceGroupName: 'terrastate'
+        backendAzureRmStorageAccountName: 'terrastatesa'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'prod.terraform.tfstate'
+    - task: TerraformTaskV4@4
+      displayName: Tf validate
+      inputs:
+        provider: 'azurerm'
+        command: 'validate'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/prod'
+    - task: TerraformTaskV4@4
+      displayName: Tf fmt
+      inputs:
+        provider: 'azurerm'
+        command: 'custom'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/prod'
+        outputTo: 'console'
+        customCommand: 'fmt'
+        environmentServiceNameAzureRM: 'mydevops'
+      
+    - task: TerraformTaskV4@4
+      displayName: Tf plan
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/prod'
+        commandOptions: '-out $(Build.SourcesDirectory)/prod/tfplanfile'
+        environmentServiceNameAzureRM: 'mydevops'
+      
+    - task: ArchiveFiles@2
+      displayName: Archive files
+      inputs:
+        rootFolderOrFile: '$(Build.SourcesDirectory)/prod'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+        replaceExistingArchive: true
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: '$(Build.BuildId)-build'
+        publishLocation: 'Container'
