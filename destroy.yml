@@ -1,0 +1,77 @@
+trigger: none
+
+parameters:
+- name: environment
+  type: string
+  values:
+  - dev
+  - staging
+  default: dev
+
+
+stages:
+- stage: Plan_Destroy
+  jobs:
+  - job: terraform_plan_destroy
+    pool:
+      #vmImage: 'ubuntu-latest'
+      name: deep09
+    steps:
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'
+    
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.environment }}'
+        backendServiceArm: 'mydevops'
+        backendAzureRmResourceGroupName: 'terrastate'
+        backendAzureRmStorageAccountName: 'terrastatesa'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: '${{ parameters.environment }}.terraform.tfstate'
+    
+    - task: TerraformTaskV4@4
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.environment }}'
+        commandOptions: '-destroy'
+        environmentServiceNameAzureRM: 'mydevops'
+
+- stage: Destroy
+  dependsOn: Plan_Destroy
+  condition: succeeded()
+  jobs:
+  - deployment: terraform_destroy
+    environment: ${{ parameters.environment }}
+    pool:
+      #vmImage: 'ubuntu-latest'
+      name: deep09
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+          
+          - task: TerraformTaskV4@4
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.environment }}'
+              commandOptions: '-reconfigure'
+              backendServiceArm: 'mydevops'
+              backendAzureRmResourceGroupName: 'terrastate'
+              backendAzureRmStorageAccountName: 'terrastatesa'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: '${{ parameters.environment }}.terraform.tfstate'
+          
+          - task: TerraformTaskV4@4
+            inputs:
+              provider: 'azurerm'
+              command: 'destroy'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/${{ parameters.environment }}'
+              environmentServiceNameAzureRM: 'mydevops'
