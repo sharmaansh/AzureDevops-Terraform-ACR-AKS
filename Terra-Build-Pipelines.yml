@@ -1,4 +1,3 @@
-# specific path build
 trigger:
   branches:
     include:
